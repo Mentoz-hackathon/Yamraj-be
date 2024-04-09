@@ -1,27 +1,44 @@
 const userModel = require("../models/users");
-const bcrypt = require('bcrypt');
-const responseWrapper = require('../helpers/responseWrapper');
+const bcrypt = require("bcrypt");
+const responseWrapper = require("../helpers/responseWrapper");
+const zod = require("zod");
 
+const userSchema = zod.object({
+  email: zod.string().email(),
+  password: zod.string().min(6),
+  firstName: zod.string(),
+  lastName: zod.string(),
+});
+
+const loginUserSchema = zod.object({
+  email: zod.string().email(),
+  password: zod.string().min(6),
+});
 
 module.exports = {
   signupUser: async (req, res) => {
-    const { firstName, lastName, email, password } = req.body;
-    if (!email || !password) {
+    const { success } = userSchema.safeParse(req.body);
+    if (!success) {
       return res.status(400).json({ message: "Incomplete details" });
     }
     try {
       let respo;
-      const user = await userModel.findOne({ email });
+      const user = await userModel.findOne({ email: req.body.email });
       if (user) {
         respo = responseWrapper(null, "Already a user try signin in", 302);
         res.status(302).json(respo);
       }
       const salt = await bcrypt.genSalt(10);
-      const hashedPassword = await bcrypt.hash(password, salt);
-      const newUser = new userModel({ email, password:hashedPassword, firstName, lastName });
+      const hashedPassword = await bcrypt.hash(req.body.password, salt);
+      const newUser = new userModel({
+        email: req.body.email,
+        password: hashedPassword,
+        firstName: req.body.firstName,
+        lastName: req.body.lastName,
+      });
       const savedUser = await newUser.save();
 
-      console.log('User created successfully');
+      console.log("User created successfully");
       respo = responseWrapper(savedUser, "success", 201);
       res.status(201).json(respo);
     } catch (err) {
@@ -30,24 +47,27 @@ module.exports = {
       res.status(500).json(respo);
     }
   },
-  
+
   loginUser: async (req, res) => {
-    const { email, password } = req.body;
-    if (!email || !password) {
+    const { success } = loginUserSchema.safeParse(req.body);
+    if (!success) {
       return res.status(400).json({ message: "Incomplete details" });
     }
     try {
       let respo;
-      const user = await userModel.findOne({ email });
+      const user = await userModel.findOne({ email: req.body.email });
       if (!user) {
         return res.status(204).json({ message: "User not found" });
       }
-      const validPassword = await bcrypt.compare(password, user.password);
+      const validPassword = await bcrypt.compare(
+        req.body.password,
+        user.password
+      );
       if (!validPassword) {
         respo = responseWrapper(savedUser, "Invalid credentials", 400);
         res.status(400).json(respo);
       }
-      console.log('User logged in successfully');
+      console.log("User logged in successfully");
       respo = responseWrapper(user, "success", 200);
       res.status(200).json(respo);
     } catch (err) {
